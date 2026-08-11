@@ -1,0 +1,30 @@
+{
+  "home_id": 20581524,
+  "name": "Nobrega",
+  "rooms": [
+    {
+      "name": "Sala de Estar",
+      "room_id": 62347749
+    },
+    {
+      "name": "Quarto principal",
+      "room_id": 62347750
+    },
+    {
+      "name": "Quarto Secundário",
+      "room_id": 62347751
+    },
+    {
+      "name": "Sala de Jantar",
+      "room_id": 62347752
+    },
+    {
+      "name": "Cozinha",
+      "room_id": 62347753
+    },
+    {
+      "name": "Escritório",
+      "room_id": 62347754
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "category": "infrared_ac",
+  "functions": [
+    {
+      "code": "switch",
+      "desc": "switch",
+      "name": "switch",
+      "type": "BOOLEAN",
+      "values": "{}"
+    },
+    {
+      "code": "mode",
+      "desc": "mode",
+      "name": "mode",
+      "type": "ENUM",
+      "values": "{\"range\":[\"dehumidification\",\"cold\",\"auto\",\"wind_dry\",\"heat\"]}"
+    },
+    {
+      "code": "temp",
+      "desc": "temp",
+      "name": "temp",
+      "type": "INTEGER",
+      "values": "{\"max\":30,\"min\":16,\"scale\":0,\"step\":1,\"type\":\"Integer\",\"unit\":\"℃\"}"
+    },
+    {
+      "code": "fan",
+      "desc": "fan",
+      "name": "fan",
+      "type": "ENUM",
+      "values": "{\"range\":[\"low\",\"mid\",\"high\",\"auto\"]}"
+    },
+    {
+      "code": "switch",
+      "desc": "switch",
+      "name": "switch",
+      "type": "BOOLEAN",
+      "values": "{}"
+    },
+    {
+      "code": "mode",
+      "desc": "mode",
+      "name": "mode",
+      "type": "ENUM",
+      "values": "{\"range\":[\"dehumidification\",\"cold\",\"auto\",\"wind_dry\",\"heat\"]}"
+    },
+    {
+      "code": "temp",
+      "desc": "temp",
+      "name": "temp",
+      "type": "INTEGER",
+      "values": "{\"max\":30,\"min\":16,\"scale\":0,\"step\":1,\"type\":\"Integer\",\"unit\":\"℃\"}"
+    },
+    {
+      "code": "fan",
+      "desc": "fan",
+      "name": "fan",
+      "type": "ENUM",
+      "values": "{\"range\":[\"low\",\"mid\",\"high\",\"auto\"]}"
+    }
+  ]
+}

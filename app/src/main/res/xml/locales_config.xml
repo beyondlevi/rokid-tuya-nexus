@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The plugin ships English only, declared so Android lists it in the per-app
+     language picker and every other locale falls back to English. -->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en-US" />
+</locale-config>
