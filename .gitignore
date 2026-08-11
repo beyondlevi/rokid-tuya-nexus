@@ -4,3 +4,5 @@ local.properties
 *.p12
 *.keystore
 .idea/
+*.apk
+*.aab
