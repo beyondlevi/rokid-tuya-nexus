@@ -120,6 +120,40 @@ class TuyaApiTest {
     }
 
     @Test
+    fun `an oversized response is rejected instead of being parsed`() {
+        enqueueToken()
+        // A body past the cap must never reach the JSON parser: the response is
+        // attacker-controlled from the plugin's point of view and the process is
+        // shared with the live HUD session.
+        val huge = "{\"success\":true,\"result\":\"" + "a".repeat((TuyaApi.MAX_RESPONSE_BYTES + 1024).toInt()) + "\"}"
+        server.enqueue(MockResponse().setBody(huge))
+
+        val failure = runCatching { api().get("/v1.0/devices/a") }.exceptionOrNull()
+        assertTrue(failure is TuyaApiException)
+        assertEquals("response_too_large", (failure as TuyaApiException).apiCode)
+    }
+
+    @Test
+    fun `a response declaring an oversized length is rejected before reading it`() {
+        enqueueToken()
+        server.enqueue(
+            MockResponse()
+                .setBody("{}")
+                .setHeader("Content-Length", (TuyaApi.MAX_RESPONSE_BYTES + 1).toString()),
+        )
+
+        val failure = runCatching { api().get("/v1.0/devices/a") }.exceptionOrNull()
+        assertEquals("response_too_large", (failure as TuyaApiException).apiCode)
+    }
+
+    @Test
+    fun `a response at the limit still parses`() {
+        enqueueToken()
+        server.enqueue(MockResponse().setBody("""{"success":true,"result":{"ok":true}}"""))
+        assertTrue(api().get("/v1.0/devices/a").optBoolean("ok"))
+    }
+
+    @Test
     fun `commands are posted as a signed json body`() {
         enqueueToken()
         server.enqueue(MockResponse().setBody("""{"success":true,"result":true}"""))

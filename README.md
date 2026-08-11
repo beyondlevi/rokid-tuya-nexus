@@ -55,6 +55,12 @@ Nexus phone app → Plugins → Tuya Smart Home → settings:
 "Test connection" signs in and reports how many homes and devices the project
 can actually see.
 
+The credentials are kept in `EncryptedSharedPreferences`, sealed with an AES key
+held in the Android Keystore — they are never written to a plaintext preferences
+file, and they are sent to nothing but Tuya's API. If the Keystore is
+unavailable on a device, the plugin fails closed and asks for the keys again
+rather than persisting them in the clear.
+
 ## Build
 
 ```bash

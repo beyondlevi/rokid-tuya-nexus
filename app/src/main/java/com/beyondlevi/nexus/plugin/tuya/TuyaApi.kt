@@ -137,7 +137,7 @@ class TuyaApi(
             .build()
 
         val raw = client.newCall(request).execute().use { response ->
-            val text = response.body?.string().orEmpty()
+            val text = readBounded(response, path)
             if (!response.isSuccessful && text.isBlank()) {
                 throw TuyaApiException("http_${response.code}", response.message, path)
             }
@@ -158,6 +158,28 @@ class TuyaApi(
         }
         return envelope.optJSONObject("result")
             ?: JSONObject().put(RESULT_ARRAY_KEY, envelope.optJSONArray("result") ?: org.json.JSONArray())
+    }
+
+    /**
+     * Reads at most [MAX_RESPONSE_BYTES] of the body. A remote that answers with
+     * an oversized or endless body is rejected before anything is buffered into
+     * the JSON parser, so it cannot exhaust the plugin's heap — the response is
+     * attacker-controlled from the plugin's point of view, and the process is
+     * shared with the live HUD session.
+     */
+    private fun readBounded(response: okhttp3.Response, path: String): String {
+        val body = response.body ?: return ""
+        val declared = body.contentLength()
+        if (declared > MAX_RESPONSE_BYTES) {
+            throw TuyaApiException("response_too_large", "response declared $declared bytes", path)
+        }
+        val source = body.source()
+        // request() fills the buffer up to the limit; more available => too large.
+        source.request(MAX_RESPONSE_BYTES + 1)
+        if (source.buffer.size > MAX_RESPONSE_BYTES) {
+            throw TuyaApiException("response_too_large", "response exceeded the size limit", path)
+        }
+        return source.buffer.readString(body.contentType()?.charset() ?: Charsets.UTF_8)
     }
 
     internal fun stringToSign(
@@ -185,9 +207,20 @@ class TuyaApi(
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
         private val TOKEN_ERROR_CODES = setOf("1010", "1011", "1012", "1013", "1004")
 
+        /**
+         * The largest Tuya answer worth parsing. The biggest real response is
+         * the account-wide device list (40 devices with inline status ≈ 60 KiB);
+         * 2 MiB leaves a wide margin and still bounds the heap.
+         */
+        internal const val MAX_RESPONSE_BYTES = 2L * 1024 * 1024
+
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(12, TimeUnit.SECONDS)
+            .writeTimeout(10, TimeUnit.SECONDS)
+            // A whole-call ceiling, so a slow-drip response cannot hold the
+            // plugin open indefinitely while the HUD waits on it.
+            .callTimeout(20, TimeUnit.SECONDS)
             .build()
 
         fun sha256Hex(value: String): String =

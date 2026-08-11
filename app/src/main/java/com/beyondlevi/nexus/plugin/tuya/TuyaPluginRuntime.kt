@@ -37,13 +37,19 @@ internal class TuyaPluginRuntime(
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val state = TuyaPluginState()
     private var work: Job? = null
+
+    /** Bumped by open/close: invalidates work from a previous session. */
     private var generation = 0L
+
+    /** Bumped by every launch and by any navigation that abandons the request. */
+    private var workGeneration = 0L
+
     private var open = false
     private var lastDirectionAtMs = Long.MIN_VALUE
 
     fun open() {
         generation += 1
-        work?.cancel()
+        invalidateWork()
         open = true
         lastDirectionAtMs = Long.MIN_VALUE
         state.reset()
@@ -60,8 +66,7 @@ internal class TuyaPluginRuntime(
     fun close() {
         generation += 1
         open = false
-        work?.cancel()
-        work = null
+        invalidateWork()
         state.reset()
         host.hideSurface()
     }
@@ -75,6 +80,10 @@ internal class TuyaPluginRuntime(
         if (!open || event.action != KeyEvent.ACTION_DOWN) return
         when (event.keyCode) {
             in BACK_KEYS -> {
+                // Leaving a view abandons whatever that view was loading. Without
+                // this, a reply that lands after BACK still applies and reopens the
+                // screen the wearer just left.
+                invalidateWork()
                 if (state.back() == TuyaEffect.Close) close() else render(show = false)
             }
             in FORWARD_KEYS -> if (debounced()) move(1)
@@ -103,33 +112,63 @@ internal class TuyaPluginRuntime(
         when (effect) {
             is TuyaEffect.None -> Unit
             is TuyaEffect.Close -> close()
-            is TuyaEffect.LoadHomes -> launchWork { state.applyHomes(host.loadHomes()) }
-            is TuyaEffect.LoadHome -> launchWork { state.applyHome(host.loadHome(effect.home)) }
-            is TuyaEffect.LoadDevice -> launchWork { state.applyDevice(host.loadDevice(effect.device)) }
-            is TuyaEffect.SendCommand -> launchWork {
+            is TuyaEffect.LoadHomes -> launchWork {
+                val homes = host.loadHomes()
+                ({ state.applyHomes(homes) })
+            }
+            is TuyaEffect.LoadHome -> launchWork {
+                val snapshot = host.loadHome(effect.home)
+                ({ state.applyHome(snapshot) })
+            }
+            is TuyaEffect.LoadDevice -> launchWork {
+                val detail = host.loadDevice(effect.device)
+                ({ state.applyDevice(detail) })
+            }
+            is TuyaEffect.SendCommand -> launchWork { stillCurrent ->
                 host.sendCommand(effect.device, effect.code, effect.value)
+                if (!stillCurrent()) return@launchWork null
                 state.setStatus("Sent: ${effect.label}")
                 render(show = false)
                 // Tuya reports the new status a beat after accepting the command.
                 delay(settleDelayMs)
-                state.applyDevice(host.loadDevice(effect.device))
+                if (!stillCurrent()) return@launchWork null
+                val detail = host.loadDevice(effect.device)
+                ({ state.applyDevice(detail) })
             }
         }
     }
 
-    private fun launchWork(block: suspend () -> Unit) {
+    /** Drops the outstanding request so a late reply can no longer apply. */
+    private fun invalidateWork() {
+        workGeneration += 1
         work?.cancel()
-        val current = generation
+        work = null
+    }
+
+    /**
+     * Runs one request off the input thread. The suspending part may only read;
+     * it returns the mutation to perform, which runs **only if the view that
+     * asked for it is still the current one** — cancellation alone is not enough,
+     * because a coroutine already past its last suspension point still completes.
+     */
+    private fun launchWork(block: suspend (stillCurrent: () -> Boolean) -> (() -> Unit)?) {
+        invalidateWork()
+        val session = generation
+        val ticket = workGeneration
+        val stillCurrent = { open && generation == session && workGeneration == ticket }
+
         work = scope.launch {
-            try {
-                block()
+            val apply: (() -> Unit)? = try {
+                block(stillCurrent)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Throwable) {
-                if (!isCurrent(current)) return@launch
-                state.applyFailure(describe(failure))
+                val message = describe(failure)
+                ({ state.applyFailure(message) })
             }
-            if (isCurrent(current)) render(show = false)
+            if (!stillCurrent()) return@launch
+            apply?.invoke()
+            render(show = false)
         }
     }
 
@@ -145,8 +184,6 @@ internal class TuyaPluginRuntime(
         }
         else -> failure.message?.take(120) ?: "Could not reach Tuya."
     }
-
-    private fun isCurrent(expected: Long): Boolean = open && generation == expected
 
     private fun render(show: Boolean) {
         if (!open) return
